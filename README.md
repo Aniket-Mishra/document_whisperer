@@ -1,5 +1,5 @@
 # document_whisperer
-Repo for talking to documents\
+Repo for talking to documents
 
 
 Models present:
