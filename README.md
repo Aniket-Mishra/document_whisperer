@@ -1,41 +1,47 @@
 # document_whisperer
 
-Repo for talking to documents
+Talk to PDFs on this machine. Ingest a file or a top-level folder, then ask. Ollama runs `nomic-embed-text` and `mistral-nemo:12b`. FastAPI is the HTTP app. DuckDB is the document catalog. Chroma holds the chunks.
 
-Models present:![alt text](readme_images/ollama_models.png)
+## Setup
 
-Current Structure:![alt text](readme_images/parent_directory.png)
+```sh
+ollama serve
+ollama pull nomic-embed-text
+ollama pull mistral-nemo:12b
 
-  
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
 
-<pre>  
-+----------------------+      +-------------------------+      +-----------------------+  
-|    Research PDFs    |------>|  Ingestion Pipeline    |------>|      Datastores      |  
-|  (Directory/Upload)  |      |  (Python CLI Script)    |      |                      |  
-+----------------------+      |                        |      | [VectorDB: ChromaDB]  |  
-                              | 1. Parse (PyMuPDF)      |      |  - Embeddings        |  
-                              | 2. Extract Metadata    |      |  - Content Chunks    |  
-                              | 3. Chunk (Heading-Aware)|      |  - Core Metadata      |  
-                              | 4. Embed (Ollama)      |      |                      |  
-                              | 5. Store (Chroma/DuckDB)|      | [SQL DB: DuckDB]      |  
-                              +-------------------------+      |  - Doc Metadata      |  
-                                                                |  - Chunk Analytics    |  
-                                                                +-----------------------+  
-                                                                            ^  
-                                                                            |  
-+----------------------+      +-------------------------+      +-----------+-----------+  
-|    User/Client      |------>|      FastAPI Server    |<----->|    RAG Pipeline      |  
-|  (OpenWebUI, cURL)  |      |                        |      |                      |  
-+----------------------+      | POST /query            |      | 1. Embed Query        |  
-  - Question          <-------| GET  /doc/:id          |      | 2. Retrieve (Chroma)  |  
-  - Answer w/ citations        | POST /ingest            |      | 3. Rerank (Local)    |  
-                              +-------------------------+      | 4. Context Assembly  |  
-                                            |                    | 5. Prompt LLM (Ollama)|  
-                                            v                    +-----------------------+  
-                                +---------------------+  
-                                |  Ollama Service    |  
-                                |                    |  
-                                | - LLM              |  
-                                | - Embedding Model  |  
-                                +---------------------+  
-</pre>
+Settings live in `.env`.
+
+## Run the API
+
+```sh
+python api.py
+```
+
+Open http://localhost:8000/docs to upload a PDF and query it.
+
+```sh
+curl -F file=@paper.pdf http://localhost:8000/ingest/upload
+curl -X POST http://localhost:8000/ingest/path \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"data/pdfs"}'
+curl -X POST http://localhost:8000/query \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What is this paper about?"}'
+curl http://localhost:8000/documents
+```
+
+`POST /ingest/path` reads a PDF, or every `*.pdf` in a folder (not nested). Uploads land in `PDF_DIR` (`data/pdfs`). Keep `data/` with the process. One process per DuckDB file.
+
+## CLI
+
+```sh
+python cli.py path/to/paper.pdf
+python cli.py path/to/folder
+```
+
+Type a question. Type quit to exit.
